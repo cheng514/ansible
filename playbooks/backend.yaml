@@ -1,0 +1,74 @@
+- name: load dn hostvars
+  hosts: all
+  tasks: []
+
+- name: play backend
+  hosts: app
+  become: yes
+  tags:
+  - backend-pre-build
+  tasks:
+  - import_role:
+      name: abdennour.golang
+    vars:
+      golang_version: "1.14"
+      golang_packages:
+      - github.com/gorilla/mux
+      - go.mongodb.org/mongo-driver/mongo
+      golang_users:
+      - "{{ ansible_ssh_user }}"
+
+- name: play backend
+  hosts: app
+  become: yes
+  vars:
+    build_workspace: /opt/build_dir
+    repo_url: https://github.com/kubernetes-tn/go-to-do-app.git
+    repo_name: go-to-do-app
+  tags:
+  - backend-build
+  tasks:
+  - name: file exists
+    file: 
+      path: "{{ build_workspace }}"
+      state: directory
+  - name: git checkout
+    git:
+      repo: "{{ repo_url }}"
+      dest: "{{ build_workspace }}/{{ repo_name }}"
+      force: yes
+  - name: go build 
+    shell: . /etc/profile;go build -o {{ backend_tmp_bin }}
+    args:
+      chdir: "{{ build_workspace }}/{{ repo_name }}/server"
+
+- name: play backend
+  hosts: app
+  become: yes
+  tags:
+  - backend-deploy
+  tasks: 
+  - name: add todo to systemd service
+    template:
+      src: todo.service.j2
+      dest: /lib/systemd/system/todo.service
+    notify: systemd reloaded
+    
+  - name: generate todo env file
+    include_tasks: tasks/backend_env_file.yaml
+
+  - name: deploy backend
+    copy:
+      src: "{{ backend_tmp_bin }}"
+      dest: "{{ backend_prod_bin }}"
+      mode: a+x
+      remote_src: yes
+    notify: backend restarted
+  handlers:
+  - name: systemd reloaded
+    systemd:
+      daemon_reload: yes
+  - name: backend restarted
+    service:
+      name: todo
+      state: restarted

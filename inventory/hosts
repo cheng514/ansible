@@ -1,0 +1,10 @@
+app ansible_host=52.62.110.36
+db ansible_host=3.104.110.20
+
+[todo]
+app
+db
+
+[todo:vars]
+ansible_ssh_user=ubuntu
+ansible_private_key_file=./Onemdakey1.pem

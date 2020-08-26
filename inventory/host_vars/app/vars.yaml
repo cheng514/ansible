@@ -1,0 +1,3 @@
+backend_tmp_bin: /tmp/todo
+backend_prod_bin: /usr/local/bin/todo
+backend_env_file: /etc/todo.env

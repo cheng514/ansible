@@ -1,0 +1,71 @@
+- name: frontend prebuild
+  hosts: app
+  become: yes
+  tags:
+  - frontend-pre-build
+  pre_tasks:
+    - name: Update repositories cache
+      apt:
+        update_cache: yes
+  tasks: 
+  - name: install nodejs
+    import_role:
+      name: geerlingguy.nodejs
+    vars:
+      nodejs_version: "13.x"
+
+- name: frontend build
+  hosts: app
+  become: yes
+  vars:
+    build_workspace: /opt/build_dir
+    repo_url: https://github.com/kubernetes-tn/go-to-do-app.git
+    repo_name: go-to-do-app
+  tags:
+  - frontend-build
+  tasks:
+  - name: file exists
+    file: 
+      path: "{{ build_workspace }}"
+      state: directory
+  - name: git checkout
+    git:
+      repo: "{{ repo_url }}"
+      dest: "{{ build_workspace }}/{{ repo_name }}"
+  - name: npm install node_modules
+    npm:
+      path: "{{ build_workspace }}/{{ repo_name }}/client"
+      state: present
+
+- name: frontend deploy
+  hosts: app
+  become: yes
+  vars:
+    frontend_deploy_dir: /opt/build_dir/go-to-do-app/client
+  tags:
+  - frontend-deploy
+  tasks:
+  - name: NODE | Install pm2
+    npm:
+      name: pm2
+      global: yes
+      production: yes
+      state: present
+    
+  - name: NODE | Stop APP 
+    shell: pm2 stop todo 
+    args: 
+      chdir: "{{ frontend_deploy_dir }}"
+    ignore_errors: yes
+
+  - name: frontend is configured with api
+    lineinfile:
+      path: "{{ frontend_deploy_dir }}/.env"
+      regexp: '^REACT_APP_API_ENDPOINT='
+      line: REACT_APP_API_ENDPOINT=http://{{ ansible_host }}:8080
+
+  - name: NODE | Start APP 
+    shell: pm2 start node_modules/react-scripts/scripts/start.js --name todo 
+    args:
+      chdir: "{{ frontend_deploy_dir }}"
+    ignore_errors: yes

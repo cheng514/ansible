@@ -1,0 +1,92 @@
+- name: database install
+  hosts: db
+  become: yes
+  tags:
+  - install database
+  tasks: 
+    - name: gnupg is installed
+      package:
+        name: gnupg
+        state: present
+    - name: mongodb-key is added
+      apt_key:
+        url: https://www.mongodb.org/static/pgp/server-4.4.asc
+    - name: mongodb repo is enabled
+      apt_repository:
+        repo: deb https://repo.mongodb.org/apt/ubuntu bionic/mongodb-org/4.4 multiverse
+        state: present
+        filename: mongodb-org-4.4
+    - name: mongodb is installed
+      package:
+        name: mongodb-org
+        state: present
+    - name: mongodb is started
+      service:
+        name: mongod
+        state: started
+        enabled: yes
+
+- name: configure the admin
+  hosts: db
+  become: yes
+  tags: 
+  - db-config-admin
+  tasks: 
+  - name: admin user
+    command: "{{ item }}"
+    loop: 
+    - mongo admin --eval 'db.dropUser("{{ db_admin_user }}")'
+    - |
+      mongo admin --eval 'db.createUser( { user: "{{ db_admin_user }}", pwd: "{{ db_admin_pass }}", roles: [ { role: "clusterAdmin", db: "admin" }, { role: "userAdminAnyDatabase", db: "admin" } ] } )'
+  - name: security is enabled
+    blockinfile:
+      path: /etc/mongod.conf
+      block: |
+        security:
+          authorization: "enabled"
+      state: present
+    notify: mongodb is restarted
+  handlers:
+  - name: mongodb is restarted
+    service:
+      name: mongod
+      state: restarted
+
+- name: configure user and security
+  hosts: db
+  become: yes
+  tags: 
+  - db-config
+  tasks:
+  - name: pip3 install
+    package:
+      name: python3-pip
+      state: latest
+  - name: pip pymongo installed
+    pip:
+      name: pymongo
+      state: latest
+  - name: todo db user exists
+    mongodb_user:
+      login_user: "{{ db_admin_user }}"
+      login_password: "{{ db_admin_pass }}"
+      database: admin
+      user: "{{ db_todo_user }}"
+      password: "{{ db_todo_user }}"
+      state: present
+      roles:
+        - db: "{{ db_name_todo }}"
+          role: readWrite
+
+  - name: db accepts connection from anywhere
+    lineinfile:
+      path: /etc/mongod.conf
+      line: "  bindIp: 0.0.0.0"
+      regexp: '^(.*)bindIp(.*)$'
+      state: present
+    notify: mongodb is restarted
+  handlers:
+  - name: mongodb is restarted
+    service:
+      name: mongod
+      state: restarted

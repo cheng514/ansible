@@ -1,0 +1,15 @@
+- name: env file exists
+  file:
+    path: "{{ backend_env_file }}"
+    state: touch
+
+- name: DB_NAME env var is up to date
+  lineinfile:
+    path: "{{ backend_env_file }}"
+    line: DB_NAME={{ hostvars['db']['db_name_todo'] }}
+    regexp: '^DB_NAME='
+- name: DB_CONNECTION env var is up to date
+  lineinfile:
+    path: "{{ backend_env_file }}"
+    line: DB_CONNECTION=mongodb://{{ hostvars['db']['db_todo_user'] }}:{{ hostvars['db']['db_todo_pass'] }}@{{ hostvars['db']['ansible_facts']['default_ipv4']['address']}}:27017
+    regexp: '^DB_CONNECTION='
